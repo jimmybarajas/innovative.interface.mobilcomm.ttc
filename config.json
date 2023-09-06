@@ -1,17 +1,17 @@
 {
     "prod": {
         "retryTime": 3000,
-        "waitTime": 5000,
-        "batchCount": 1,
+        "waitTime": 1000,
+        "batchCount": 5,
         "sasAuth": "Basic ZDg2QTRGOTg3NjJiREE2MkFkYkM4NDdmMkI0ZUQ5NzpDNjY4NTZEMzMxQ0ExRWQ5QjM5N0JDMmNiZWMwNzZF",
         "sasUrl": "https://api.stg.trimble-transportation.com/api/v1/identity/oauth/token",
-        "connectUrl": "Endpoint=sb://staging-sb-tcx-0-4-01.servicebus.windows.net/;SharedAccessSignature=",
+        "connectUrl": "Endpoint=https://staging-sb-tcx-0-4-01.servicebus.windows.net/;SharedAccessSignature=",
         "topicName": "ca83b8a7111ac12938d3bdd9",
         "subscriptionName": "5fd3cb7256657333e2e43e87",
         "ibmIHostName": "dev.iesaccess.com",
         "ibmIDtaq": "FCXINBOUND",
         "ibmIDataLib": "IESQAMONF",
-        "ibmIUser": "",
+        "ibmIUser": "SMIS",
         "ibmIPass": ""
     }
 }
