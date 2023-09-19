@@ -20,30 +20,20 @@
 // 		------ ----- -------------- -------------------------------------// 
 // 		072920 SMIS  IN25572        FleetConneX                          // 
 //A0001 072923 SMIS  IN44355        Add error logging to fcxerrlogp      // 
-//A0002 072623 SMIS  IN44355        Fix apos error when writing to dtaq  //
-//A0003 090423 SMIS  IN45182        Add datadog logging capability       //
+//A0002 072623 SMIS  INXXXXX        Fix apos error when writing to dtaq  //
 //-----------------------------------------------------------------------//
 
 const { delay, ServiceBusClient, ServiceBusMessage, isServiceBusError } = require("@azure/service-bus");
 const axios = require('axios');
 const { Connection, Statement, IN, CHAR } = require('idb-pconnector');
 const config = require('./config.json');
-const { createLogger, format, transports } = require('winston');  //A0003
 
 
  async function main() 
  {  
-		//*******************************************************A0003 *start
-		const ddLoggingOn = await getDataDogStatus();
-		let logger;
-		if (ddLoggingOn) {
-			logger = await getDataDogLogger();
-			}
-	
-		//*******************************************************A0003 *end	
  	let sig = await getSas();
 	let connectionString = config.prod.connectUrl + `${sig}`;
-	
+
 	// create a Service Bus client using the connection string to the Service Bus namespace
 	let sbClient = new ServiceBusClient(connectionString);
 
@@ -55,21 +45,18 @@ const { createLogger, format, transports } = require('winston');  //A0003
 		try
 		{
 			const messages = await receiver.receiveMessages(config.prod.batchCount, {maxWaitTimeInMs: config.prod.waitTime});
-			//D0003 DebugLog("Count of mesgs recv'd: " + messages.length, "");   //A0001
-			DebugLog("Count of mesgs recv'd: " + messages.length, "", false);  //A0003
+			DebugLog("Count of mesgs recv'd: " + messages.length, "");   //A0001
 			messages.forEach(message => 
 			{
 				//D0001 console.log(`Received message: ${JSON.stringify(message.body)}`);
-				//D0003 DebugLog('Recv New Message', JSON.stringify(message.body));  //A0001
-				DebugLog('Recv New Message', JSON.stringify(message.body), true);    //A0003
+				DebugLog('Recv New Message', JSON.stringify(message.body));  //A0001
 				
                 receiver.completeMessage(message);
                 //D0001 processMessage(message).catch((err) => 
                 processMessage(message).catch((error) =>                //A0001
 				{
 					//D0001 console.log("Error occurred: ", err);
-					//D0003 DebugLog("Error processMessage", error.message);  //A0001
-					DebugLog("Error processMessage", error.message, true); //A0003
+					DebugLog("Error processMessage", error.message);  //A0001
 					process.exit(1);
 				});;
 			});
@@ -77,8 +64,7 @@ const { createLogger, format, transports } = require('winston');  //A0003
 		catch (error) 
 		{		
 			//D0001 console.log(`Error from source occurred: `, error);	
-			//D0003 DebugLog(`Error from source occurred`, error.message);    //A0001
-			DebugLog(`Error from source occurred`, error.message, true);  //A0003
+			DebugLog(`Error from source occurred`, error.message);    //A0001
 			if (isServiceBusError(error)) 
 			{
 				switch (error.code) 
@@ -87,8 +73,7 @@ const { createLogger, format, transports } = require('winston');  //A0003
 						if (error.message.startsWith('ExpiredToken')) 
 						{
 							//D0001 console.log('Signature expired, reestablishing connection');
-							//D0003 DebugLog('Signature expired, renewing...', '');   //A0001
-							DebugLog('Signature expired, renewing...', '', false);  //A0003
+							DebugLog('Signature expired, renewing...', '');   //A0001
 							
 							sig = await getSas();
 							let connectionString = config.prod.connectUrl + `${sig}`;
@@ -102,27 +87,24 @@ const { createLogger, format, transports } = require('winston');  //A0003
 						else 
 						{
 							//D0001 console.log(`An unrecoverable error occurred. Stopping processing. ${error.code}`, error);
-							//D0003 DebugLog(`An unrecoverable error occurred. Stopping processing`, error.message);  //A0001
-							DebugLog(`An unrecoverable error occurred. Stopping processing`, error.message, true); //A0003	
+							DebugLog(`An unrecoverable error occurred. Stopping processing`, error.message);  //A0001	
 						}
 						break;
 					case "ServiceBusy":
 						// choosing an arbitrary amount of time to wait.
 						//D0001 console.log('Retry...')
-						//D0003 DebugLog('Retry...', "ServiceBusy");  //A0001
-						DebugLog('Retry...', "ServiceBusy", false) //A0003
+						DebugLog('Retry...', "ServiceBusy");  //A0001
 						await delay(config.prod.retryTime);
 						break;
                     default:        //A0001
-                        //D0003 DebugLog("unknown error code from svc bus", error.message);   //A0001 
-						DebugLog("unknown error code from svc bus", error.message, true); //A0003   
+                        DebugLog("unknown error code from svc bus", error.message);   //A0001    
                         break;    //A0001
 						
 				}
 			}
 		}
 	}
-//D0003 }
+}
 
 async function getSas() 
 {
@@ -154,8 +136,7 @@ async function getSas()
 	catch (error) 
 	{
 	   //D0001  console.log('Error getting SAS; ', error);
-	   //D0003 DebugLog('Error getting SAS; ', error.message);   //A0001
-		DebugLog('Error getting SAS; ', error.message, true); //A0003											
+		DebugLog('Error getting SAS; ', error.message);   //A0001											
   	}
 }
 
@@ -165,8 +146,7 @@ async function getSas()
 
 	const statement = new Statement(connection);
 	const sql = `call qsys2.SEND_DATA_QUEUE(MESSAGE_DATA => '${outstring}', DATA_QUEUE => '${config.prod.ibmIDtaq}',  DATA_QUEUE_LIBRARY => '${config.prod.ibmIDataLib}');`;
-	//D0003 DebugLog('exec', sql);   //A0001
-	DebugLog('exec', sql, false); //A0003
+	DebugLog('exec', sql);   //A0001
 	
 	try {
 
@@ -176,15 +156,13 @@ async function getSas()
  
 	 catch (err) {
 		 //D0001  console.error(`Error: ${err.stack}`);
-		 //D0003 DebugLog("processMessage error:", err.message);  //A0001
-		 DebugLog("processMessage error:", err.message, true); //A0003
+		 DebugLog("processMessage error:", err.message);
 	 };
 
   }
 
   //**********************************************************A0001 *Start
-  //D0003 async function DebugLog(info, inMsg) {	
-	async function DebugLog(info, inMsg, logToDataDog) {  //A0003	
+ async function DebugLog(info, inMsg) {	
 
 	    // write to console
 	    console.log(`[${info}] : [${inMsg}]`);
@@ -205,87 +183,21 @@ async function getSas()
 	            console.error(`Error: ${err.stack}`);
 	        };
 	    }
-		//*******************************************************A0003 *start
-		if (ddLoggingOn){
-   		 if (logToDataDog) {
-        	  logger.log('info', inMsg)
-     	  }
-		}
-		//*******************************************************A0003 *end
+
+	    const LogToDataDog = false;
+	    
+	    if (LogToDataDog) {
+	        
+	    }
 	  }
   //***********************************************************A0001 *End
    
   
-
-
-//********************************************************A0003 *start
-async function getDataDogLogger(){
-	try {	
-		const dataDogHttp = `select * from ${config.prod.ibmIDataLib}.WEBSRVCNCT where WSVENDRID = 'DATADOG' and WSVENDRDSC = 'DATALOGGING'`;
-		const statement = new Statement(connection);
-		await statement.prepare(dataDogHttp);
-		await statement.execute();
-		const results = await statement.fetchAll();
-		const nameSpace = results[0].WSNAMESPC.trim();
-		const host = results[0].WSURLENDP.trim();
-		const secret = results[0].WSCLSECRET.trim();
-		const serviceName = results[0].WSSRVNAME.trim();
-		const httpTransportOptions = {
-			host: host,
-			path: nameSpace + 'dd-api-key=' + secret +'&ddsource=nodejs&service=' + serviceName,
-			ssl: true
-		  };
-		
-		return createLogger({
-			level: 'info',
-			exitOnError: false,
-			format: format.json(),
-			transports: [
-			  new transports.Http(httpTransportOptions),
-			],
-		  });
-	
-	}
-		catch(err){
-			 DebugLog("DataDog config error:", err.message, true);  
-		}
-	
-	
-	}
-
-	async function getDataDogStatus(){
-		try {	
-			const sql = `select WSCLIENTID from ${config.prod.ibmIDataLib}.WEBSRVCNCT where WSVENDRID = 'DATADOG' and WSVENDRDSC = 'DATALOGGING'`;
-			const statement = new Statement(connection);
-			await statement.prepare(sql);
-			await statement.execute();
-			const results = await statement.fetchAll();
-			if (results.length == 1){
-				return results[0].WSCLIENTID.trim();
-			}
-			else{
-				return false;
-			}
-	
-		}
-			catch(err){
-				 DebugLog("DataDog config error:", err.message, true); 
-				 return false; 
-			}
-		
-		
-		}
-
- }  //A0003
-
-//*******************************************************A0003 *end
-const connection = new Connection({ url: '*LOCAL' }); 
-
+const connection = new Connection({ url: '*LOCAL' });
 
 main().catch((err) => 
 {
 	//D0001 console.log("Error occurred: ", err);
-	//D0003 DebugLog("Main - Error occurred: ", err.message);  //A0001
-	console.log('Main - Error occurred', err.message)   //A0003
-	//D0003 process.exit(1);
+	DebugLog("Main - Error occurred: ", err.message);  //A0001
+	process.exit(1);
 });
