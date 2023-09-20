@@ -1,8 +1,8 @@
 {
     "prod": {
         "retryTime": 3000,
-        "waitTime": 1000,
-        "batchCount": 5,
+        "waitTime": 5000,
+        "batchCount": 1,
         "sasAuth": "Basic ZDg2QTRGOTg3NjJiREE2MkFkYkM4NDdmMkI0ZUQ5NzpDNjY4NTZEMzMxQ0ExRWQ5QjM5N0JDMmNiZWMwNzZF",
         "sasUrl": "https://api.stg.trimble-transportation.com/api/v1/identity/oauth/token",
         "connectUrl": "Endpoint=https://staging-sb-tcx-0-4-01.servicebus.windows.net/;SharedAccessSignature=",
