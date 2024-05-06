@@ -22,6 +22,7 @@
 //A0001 072923 SMIS  IN44355        Add error logging to fcxerrlogp      //
 //A0002 072623 SMIS  IN44355        Fix apos error when writing to dtaq  //
 //A0003 090423 SMIS  IN45182        Add datadog logging capability       //
+//A0004 110623 SMIS  IN45988        Enahnce datadog logging capability   //
 //-----------------------------------------------------------------------//
 
 const {
@@ -33,6 +34,7 @@ const {
 const axios = require("axios");
 const { Connection, Statement, IN, CHAR } = require("idb-pconnector");
 const config = require("./config.json");
+const os = require("os"); //A0004
 const { createLogger, format, transports } = require("winston"); //A0003
 
 async function main() {
@@ -41,6 +43,7 @@ async function main() {
   let logger;
   if (ddLoggingOn) {
     logger = await getDataDogLogger();
+    custId = await getCustomerId();   //A0004
   }
 
   //*******************************************************A0003 *end
@@ -150,7 +153,6 @@ async function main() {
           `Unexpected SAS response format: ${JSON.stringify(res.data)}`
         );
       }
-
       return res.data.access_token;
     } catch (error) {
       //D0001  console.log('Error getting SAS; ', error);
@@ -185,7 +187,7 @@ async function main() {
     // write to console
     console.log(`[${info}] : [${inMsg}]`);
 
-    const LogToDb = true;
+    const LogToDb = false;
 
     if (LogToDb) {
       // write same thing to DB
@@ -202,7 +204,10 @@ async function main() {
     }
     //*******************************************************A0003 *start
     if (ddLoggingOn && logToDataDog) {
-        logger.log("info", inMsg);
+       //D0004 logger.log("info", inMsg);
+        let hostName = os.hostname().toString() + '-' + custId;  //A0004
+        logger.log("info", inMsg, {host: hostName.trim(), CustomerId: custId});  //A0004
+      
     }
     //*******************************************************A0003 *end
   }
@@ -216,6 +221,7 @@ async function main() {
       await statement.prepare(dataDogHttp);
       await statement.execute();
       const results = await statement.fetchAll();
+      
       const nameSpace = results[0].WSNAMESPC.trim();
       const host = results[0].WSURLENDP.trim();
       const secret = results[0].WSCLSECRET.trim();
@@ -259,6 +265,23 @@ async function main() {
       return false;
     }
   }
+  //*******************************************************Begin A0004
+  async function getCustomerId() {
+   //Add query to pull customer code
+   try{
+     const custIdQuery = `select substr(data_area_value, 11,3) as custId from TABLE(qsys2.data_area_info('E##DTA', '${config.prod.ibmIDataLib}'))`;
+     const custStmt = new Statement(connection);
+     await custStmt.prepare(custIdQuery);
+     await custStmt.execute();
+     const custResults = await custStmt.fetchAll();
+     const custId = custResults[0].CUSTID.trim();
+     return custId;
+   } catch (err) {
+    DebugLog("Customer Id fetch error:", err.message, true);
+   }
+
+  }
+  //*******************************************************End A0004
 } //A0003
 
 //*******************************************************A0003 *end
