@@ -23,6 +23,8 @@
 //A0002 072623 SMIS  IN44355        Fix apos error when writing to dtaq  //
 //A0003 090423 SMIS  IN45182        Add datadog logging capability       //
 //A0004 110623 SMIS  IN45988        Enahnce datadog logging capability   //
+//A0005 050624 SMIS  IN48209        Add lib, ver and customer to dd tag logging
+//A0006 102224 SMIS  IN49962        Fix issue with completing messages   //
 //-----------------------------------------------------------------------//
 
 const {
@@ -40,10 +42,16 @@ const { createLogger, format, transports } = require("winston"); //A0003
 async function main() {
   //*******************************************************A0003 *start
   const ddLoggingOn = await getDataDogStatus();
+  console.log("DataDog logging status:", ddLoggingOn); // A0006
   let logger;
   if (ddLoggingOn) {
     logger = await getDataDogLogger();
+    console.log("DataDog logger initialized"); // A0006
     custId = await getCustomerId();   //A0004
+    console.log("Customer ID:", custId); // A0006
+    custInfo = await getLoggingData();  //A0005
+    console.log("Customer Info:", custInfo); // A0006
+
   }
 
   //*******************************************************A0003 *end
@@ -52,38 +60,57 @@ async function main() {
 
   // create a Service Bus client using the connection string to the Service Bus namespace
   let sbClient = new ServiceBusClient(connectionString);
+  console.log("sbClient initialized"); // A0006
 
   // createReceiver() can also be used to create a receiver for a queue.
   let receiver = sbClient.createReceiver(
     config.prod.topicName,
     config.prod.subscriptionName
   );
+  console.log("Receiver created"); // A0006
 
   while (true) {
     try {
+      console.log("Receive messages..."); // A0006
       const messages = await receiver.receiveMessages(config.prod.batchCount, {
         maxWaitTimeInMs: config.prod.waitTime,
       });
       //D0003 DebugLog("Count of mesgs recv'd: " + messages.length, "");   //A0001
       DebugLog("Count of mesgs recv'd: " + messages.length, "", false); //A0003
-      messages.forEach((message) => {
+      for (const message of messages) {       //A0006
+        try {                               //A0006
+        //D0006 await messages.forEach( async (message) => {
         //D0001 console.log(`Received message: ${JSON.stringify(message.body)}`);
         //D0003 DebugLog('Recv New Message', JSON.stringify(message.body));  //A0001
         DebugLog("Recv New Message", JSON.stringify(message.body), true); //A0003
-
-        receiver.completeMessage(message);
+        console.log("Message received..."); // A0006
+       // DebugLog("Message id count", `Message Id delivery count: ${message.messageId}: ${message.deliveryCount}`, true); // A0006
+       //A0006 *start
+        try {
+               await receiver.completeMessage(message);
+                console.log(`Message Completed: ${message.messageId}`); // A0006
+            } catch (error) {
+                DebugLog("Error completing message", error.message, true);
+            }
+        await processMessage(message); //A0006
+      } catch (error) {
+        DebugLog("Error processing message", error.message, true);
+      }
+       //A0006 *end
         //D0001 processMessage(message).catch((err) =>
-        processMessage(message).catch(
-          (
-            error //A0001
-          ) => {
+        // D0006 processMessage(message).catch(
+        //D0006  (
+        //D0006    error //A0001
+        //D0006  ) => {
             //D0001 console.log("Error occurred: ", err);
             //D0003 DebugLog("Error processMessage", error.message);  //A0001
-            DebugLog("Error processMessage", error.message, true); //A0003
-            process.exit(1);
-          }
-        );
-      });
+        //D0006    DebugLog("Error processMessage", error.message, true); //A0003
+        //D0006    process.exit(1);
+        //D0006  }
+        //D0006);
+      //D0006 });
+    }
+    
     } catch (error) {
       //D0001 console.log(`Error from source occurred: `, error);
       //D0003 DebugLog(`Error from source occurred`, error.message);    //A0001
@@ -91,7 +118,7 @@ async function main() {
       if (isServiceBusError(error)) {
         switch (error.code) {
           case "UnauthorizedAccess":
-            if (error.message.startsWith("ExpiredToken")) {
+            if (error.message.includes("ExpiredToken")) {
               //D0001 console.log('Signature expired, reestablishing connection');
               //D0003 DebugLog('Signature expired, renewing...', '');   //A0001
               DebugLog("Signature expired, renewing...", "", false); //A0003
@@ -153,6 +180,7 @@ async function main() {
           `Unexpected SAS response format: ${JSON.stringify(res.data)}`
         );
       }
+      console.log('saas token: ', res.data.access_token); //A0006
       return res.data.access_token;
     } catch (error) {
       //D0001  console.log('Error getting SAS; ', error);
@@ -172,6 +200,7 @@ async function main() {
 
     try {
       const results = await statement.exec(sql);
+      console.log("Message Processed..."); // A0006
     } catch (err) {
       //D0001  console.error(`Error: ${err.stack}`);
       //D0003 DebugLog("processMessage error:", err.message);  //A0001
@@ -206,7 +235,8 @@ async function main() {
     if (ddLoggingOn && logToDataDog) {
        //D0004 logger.log("info", inMsg);
         let hostName = os.hostname().toString() + '-' + custId;  //A0004
-        logger.log("info", inMsg, {host: hostName.trim(), CustomerId: custId});  //A0004
+      //D0005 logger.log("info", inMsg, {host: hostName.trim(), CustomerId: custId});  //A0004
+      logger.log("info", inMsg, {host: hostName.trim(), CustomerId: custId, name: custInfo.compName, lib: custInfo.compLib, iesversion: custInfo.compVer});  //A0005
       
     }
     //*******************************************************A0003 *end
@@ -282,6 +312,51 @@ async function main() {
 
   }
   //*******************************************************End A0004
+
+    //*******************************************************Begin A0005
+    async function getLoggingData() {
+      //Query to pull customer information
+      try{
+
+        const custInfoQuery = `WITH compInfo AS ( SELECT SUBSTR(data_area_value, 4, 30) compName, SUBSTR(data_area_value, 751, 10) compLib FROM TABLE ( qsys2.data_area_info('COMPAN', '${config.prod.ibmIDataLib}') ) ) SELECT compname, complib FROM compinfo;`;
+        const custInfoStmt = new Statement(connection);
+        await custInfoStmt.prepare(custInfoQuery);
+        await custInfoStmt.execute();
+        const custInfoResults = await custInfoStmt.fetchAll();
+        const compName = custInfoResults[0].COMPNAME.trim();
+        const compLib = custInfoResults[0].COMPLIB.trim();
+        //const compVer = custInfoResults[0].COMPVER.trim();
+        const verInfoQuery = `SELECT SUBSTR(data_area_value, 1, 10) compVer FROM TABLE ( qsys2.data_area_info('ICCVER', '${config.prod.ibmIDataLib}') ) ;`;
+        const verInfoStmt = new Statement(connection);
+        await verInfoStmt.prepare(verInfoQuery);
+        await verInfoStmt.execute();
+        try{
+        const verInfoResults = await verInfoStmt.fetchAll();
+        const compVer = verInfoResults[0].COMPVER.trim();
+        let custData = {
+          compName: compName,
+          compLib: compLib,
+          compVer: compVer
+        }
+        return custData;
+      }
+        catch {
+          compVer = 'Saas';
+        }
+        let custData = {
+          compName: compName,
+          compLib: compLib,
+          compVer: compVer
+        };
+        return custData;
+      } catch (err) {
+
+       DebugLog("Customer Data fetch error:", err.message, true);
+
+      }
+ 
+     }
+     //*******************************************************End A0005
 } //A0003
 
 //*******************************************************A0003 *end
